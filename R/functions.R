@@ -6,37 +6,39 @@ is_binary <- function(x) {
 }
 
 is_cat <- function(x) {
-  x0 <- na.omit(x) 
+  x0 <- na.omit(x)
   (length(unique(x0)) > 2 & length(unique(x0)) < 7)
 }
 
 
 
 get_analytic_data <- function(data){
-  
-  
+
+
   l1_vars <- data %>% select(contains("l1_")) %>% colnames()
-  
+
   l0_vars <-  data %>% select(contains("l0_")) %>% colnames()
-  
+
   base_vars <- data %>% select(contains(c("w_", "l0_")))%>% colnames()
-  
-  
-  
-  
+
+
+
+
   # creating analytic data-----------------------------------------------
 
-  
+
   analytic<- data %>%
     mutate(across(c(a0_teeth3,a1_teeth3) ,
                   ~factor(.x,
-                          levels = c(1:3),
+                          levels = c(1:5),
                           labels = c("eden",
-                                     "1_19",
-                                     "20_more"),ordered = T))) %>% 
+                                     "1_4",
+                                     "5_9",
+                                     "10_19",
+                                     "20_more"),ordered = T))) %>%
     mutate(across(where(is_binary), factor)) %>%
     mutate(across(where(is_cat), factor)) %>%
-    
+
     select(base_vars,
            a0_teeth3,
            a0_den_2c,
@@ -45,43 +47,44 @@ get_analytic_data <- function(data){
            a1_teeth3,
            c2,
            y_bi= y_cognition,
-           y_c= y_spm_corr)
+           y_c= y_spm_corr) %>%
+    filter(l0_spm_corr<2.0001)
 
-  
+
 }
 
 
 
 
 get_mice_data <- function(df, ...){
-  
-  data<- df %>% 
+
+  data<- df %>%
     mutate_at(vars(contains(c("l1","a1_","y_"))), ~ifelse(c1==0 , NA,.)) %>%
     mutate(y_bi= ifelse(c2==0 ,NA,y_bi),
-           y_c= ifelse(c2==0 ,NA,y_c)) 
-  
+           y_c= ifelse(c2==0 ,NA,y_c))
+
   #impute all missing values (not missing due to censoring)----
-  to_imp<- data %>% 
+  to_imp<- data %>%
     mutate_at(vars(contains(c("l1","a1_"))),
                     ~ifelse(c1==0 , -99,.)) %>%
     mutate(y_bi= ifelse(c2==0 ,-999,y_bi),
            y_c= ifelse(c2==0 ,-999,y_c)) %>%
     mice::make.where("missing")
-  
+
   # Use only base line vars for mice
   mice_vars<- df %>%
     select(starts_with(c("w_","l0_","a0_"))) %>% colnames()
-  
+
   # variables that get imputed only (not contributing to mice)
   imp_only_vars<- df %>%
     select(starts_with(c("l1","a1_")), y_bi, y_c) %>% colnames()
-  
+
   # get predictor matrix----
   allVars <- names(df)
-  
+
   ## names of variables with missingness
   missVars <- names(df)[colSums(is.na(df)) > 0]
-  
+
   ## mice predictorMatrix
   predictorMatrix <- matrix(0, ncol = length(allVars), nrow = length(allVars))
   rownames(predictorMatrix) <- allVars
@@ -90,10 +93,10 @@ get_mice_data <- function(df, ...){
   imputerMatrix[,mice_vars] <- 1
   imputedMatrix <- predictorMatrix
   imputedMatrix[,unique(c(mice_vars,imp_only_vars))] <- 1
-  
+
   ## Keep correct imputer-imputed pairs only
   predictorMatrix <- imputerMatrix * imputedMatrix
-  
+
   ## Diagonals must be zeros (a variable cannot impute itself)
   diag(predictorMatrix) <- 0
   set.seed(19851111)
@@ -103,42 +106,42 @@ get_mice_data <- function(df, ...){
                   ...)
   imp_df <- mice::complete(m,"long")
   return(imp_df)
-  
+
 }
 
 
 
 get_tmle_data <- function(imp_data){
-  
+
   cat_cols <- imp_data %>%
     select(-contains(c("teeth","imp"))) %>%
     select_if(is_cat) %>%
     colnames()
-  
+
   binary <- imp_data %>%
     select_if(is_binary) %>%
     colnames()
-  
-  
-tmle_data<- imp_data %>%
-  mutate(across(contains("teeth"), 
-                ~factor(.x,labels = 1:3,ordered = T))) %>% 
-  mutate(across(binary, as.numeric)) %>%  
-  mutate(across(binary, function(x) x-1)) %>% 
-  
-  dummy_cols(select_columns = cat_cols,
-             remove_selected_columns = T,
-             remove_first_dummy = T,
-             ignore_na = T ) %>% 
-  mutate(across(where(is.integer), as.numeric)) 
 
-tmle_data %>% select(-l0_cognition ,-a0_den_2c )
-  
+
+  tmle_data<- imp_data %>%
+    mutate(across(contains("teeth"),
+                  ~factor(.x,labels = 1:3,ordered = T))) %>%
+    mutate(across(binary, as.numeric)) %>%
+    mutate(across(binary, function(x) x-1)) %>%
+
+    dummy_cols(select_columns = cat_cols,
+               remove_selected_columns = T,
+               remove_first_dummy = T,
+               ignore_na = T ) %>%
+    mutate(across(where(is.integer), as.numeric))
+
+  tmle_data %>% select(-l0_cognition ,-a0_den_2c )
+
 }
 
 
 get_tmle_data_den <- function(imp_data){
-  
+
 
   cat_cols <- imp_data %>%
     select(-contains(c("teeth","imp","a0_den_2c"))) %>%
@@ -240,10 +243,10 @@ pool_estimates <- function(df,mi=5){
       SE.combined = sqrt(Vt),
       vm = (mi-1)*(1 + (Vw/((1+1/mi)*Vb)))^2, #df correction
       conf.low = theta.combined - qt(0.975,vm)*SE.combined,
-      conf.high = theta.combined + qt(0.975,vm)*SE.combined) %>% 
+      conf.high = theta.combined + qt(0.975,vm)*SE.combined) %>%
     dplyr::select(contrast, theta= theta.combined,conf.low,
                   conf.high, p.value= p.combined) %>%
-    mutate(p.value= format.pval(p.value, digits = 3, eps = 0.001)) %>% 
+    mutate(p.value= format.pval(p.value, digits = 3, eps = 0.001)) %>%
     ungroup()
 }
 
@@ -251,13 +254,13 @@ pool_estimates <- function(df,mi=5){
 
 
 run_lmtp_imp_data <- function(data, m, d, params){
-  
+
   data %>%
     filter(.imp== m) %>%
-    
+
     purrr::lift(run_lmtp)(data=.,params, shift= eval(as.symbol(d)))
-  
-  
+
+
 }
 
 
@@ -278,15 +281,15 @@ round_uc <- function(data){
 
 
 pool_marginal <- function(res,mi=20){
-  
-  res %>% 
-    pivot_longer(d0:d4,names_to = "d") %>% 
+
+  res %>%
+    pivot_longer(d0:d4,names_to = "d") %>%
     mutate(
       est= map_dbl(.x=value, ~.x$theta),
       se= map_dbl(.x=value, ~.x$standard_error)
-    ) %>% 
+    ) %>%
     mutate(variance=se^2) %>%
-    group_by(d) %>% 
+    group_by(d) %>%
     summarise(
       theta.combined = mean(est),
       Vw = sum(variance)/mi, # Within imputation variance
@@ -295,8 +298,8 @@ pool_marginal <- function(res,mi=20){
       SE.combined = sqrt(Vt),
       vm = (mi-1)*(1 + (Vw/((1+1/mi)*Vb)))^2, #df correction
       conf.low = theta.combined - qt(0.975,vm)*SE.combined,
-      conf.high = theta.combined + qt(0.975,vm)*SE.combined) %>% 
+      conf.high = theta.combined + qt(0.975,vm)*SE.combined) %>%
     dplyr::select(d, tmle_estimate= theta.combined,conf.low,
-                  conf.high) 
-  
+                  conf.high)
+
 }

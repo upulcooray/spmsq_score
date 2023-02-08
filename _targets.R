@@ -15,102 +15,84 @@ source("R/functions.R")
 #1st scenario (observed)
 d0 <- NULL
 
-#2nd scenario (move eden to 1-19)
+# What if edentulousness was retained 1-4 teeth
+
 d1 <- function(data,trt){
-  
+
   out <- list()
-  
+
   a <- data[[trt]]
-  
+
   for (i in 1:length(a)) {
-    if (as.character(a[i]) %in% c("2", "3")) {
-      out[[i]] <- as.character(a[i])
+    if (a[i] > 1 | is.na(a[i])) {
+      out[[i]] <- a[i]
     } else {
-      out[[i]] <- as.numeric(as.character(a[i])) + 1
+      out[[i]] <- 2 # 2= 1-4 teeth category
     }
   }
-  factor(unlist(out), levels = 1:3, ordered = TRUE)
-  
+  factor(unlist(out), levels = 1:5, ordered = TRUE)
+
 }
 
-#3rd scenario (move 1-19 to >20)
+
+
+# What if edentulousness and 1-4 teeth was was 5-9
+
 d2 <- function(data,trt){
-  
+
   out <- list()
-  
+
   a <- data[[trt]]
-  
+
   for (i in 1:length(a)) {
-    if (as.character(a[i]) %in% c("1", "3")) {
-      out[[i]] <- as.character(a[i])
+    if (a[i] > 2 | is.na(a[i])) {
+      out[[i]] <- a[i]
     } else {
-      out[[i]] <- as.numeric(as.character(a[i])) + 1
+      out[[i]] <- 3 # 3= 5-9 teeth category
     }
   }
-  factor(unlist(out), levels = 1:3, ordered = TRUE)
-  
+  factor(unlist(out), levels = 1:5, ordered = TRUE)
+
 }
 
-#3rd scenario (move eden to 1-19, 1-19 to >20)
+
+# What if edentulousness, 1-4 teeth, and 5-9 teeth was 10-19
 
 d3 <- function(data,trt){
-  
+
   out <- list()
-  
+
   a <- data[[trt]]
-  
+
   for (i in 1:length(a)) {
-    if (as.character(a[i]) %in% c( "3")) {
-      out[[i]] <- as.character(a[i])
+    if (a[i] > 3 | is.na(a[i])) {
+      out[[i]] <- a[i]
     } else {
-      out[[i]] <- as.numeric(as.character(a[i])) + 1
+      out[[i]] <- 4 # 4= 10-19 teeth category
     }
   }
-  factor(unlist(out), levels = 1:3, ordered = TRUE)
-  
+  factor(unlist(out), levels = 1:5, ordered = TRUE)
+
 }
 
-#4th scenario (move 0, 1-19 to >20)
+
+# What if everyone retained at least minimal functional dentition
+
 d4 <- function(data,trt){
-  
-  out <- list()
-  
-  a <- data[[trt]]
-  
-  for (i in 1:length(a)) {
-    if (as.character(a[i]) %in% c( "3")) {
-      out[[i]] <- as.character(a[i])
-    }
-    else if (as.character(a[i]) %in% c( "2")) {
-      out[[i]] <- as.numeric(as.character(a[i])) + 1
-    } else {
-      out[[i]] <- as.numeric(as.character(a[i])) + 2
-    }
-  }
-  factor(unlist(out), levels = 1:3,  ordered = TRUE)
-  
-  
-}
 
-#5th scenario (move to 0)
-d5 <- function(data,trt){
-  
   out <- list()
-  
+
   a <- data[[trt]]
-  
+
   for (i in 1:length(a)) {
-    if (as.character(a[i]) %in% c( "1")) {
-      out[[i]] <- as.character(a[i])
-    }
-    else if (as.character(a[i]) %in% c( "2")) {
-      out[[i]] <- as.numeric(as.character(a[i])) - 1
+    if (a[i] == 5 | is.na(a[i])) {
+      out[[i]] <- a[i]
     } else {
-      out[[i]] <- as.numeric(as.character(a[i])) - 2
+      out[[i]] <- 5 # 5= >20 teeth category
     }
   }
-  factor(unlist(out), levels = 1:3,  ordered = TRUE)
-  
+  factor(unlist(out), levels = 1:5, ordered = TRUE)
+
 }
 
 
@@ -134,32 +116,30 @@ list(
   tar_target(working_df,
              read_csv(file=df_file))
   ,
- 
-
 
 
   # create a dataset for descriptive analysis---------------------------------
-  
-  
+
+
   tar_target(analytic_data,
              get_analytic_data(working_df))
 
  ,
-  
+
   #perform imputation-----------------------------------------------------
 
-  
+
   tar_target(imp_data, get_mice_data(analytic_data,m=20,method="rf"))
- 
- ,
-  
-  tar_target(tmle_data, get_tmle_data(imp_data) )
- 
- 
+
  ,
 
-  tar_target(w0, tmle_data %>% select(contains("w_")) %>% 
-               # select(-w_spm_corr) %>% 
+  tar_target(tmle_data, get_tmle_data(imp_data) )
+
+
+ ,
+
+  tar_target(w0, tmle_data %>% select(contains("w_")) %>%
+               # select(-w_spm_corr) %>%
                colnames()),
   tar_target(l0, tmle_data %>% select(contains("l0")) %>% colnames()),
   tar_target(l1, tmle_data %>% select(contains("l1")) %>% colnames()),
@@ -181,7 +161,7 @@ list(
 
              c("SL.xgboost","SL.nnet","SL.gam"))
 
- 
+
   ,
 
    tar_target( params_sl,
@@ -304,7 +284,7 @@ tar_target(res_nosl,
                  d1=tmle_d1$tmle,
                  d2=tmle_d2$tmle,
                  d3=tmle_d3$tmle,
-                 d4=tmle_d4$tmle) %>% 
+                 d4=tmle_d4$tmle) %>%
   as_tibble() %>%
   unnest(imp) )
 ,
@@ -345,8 +325,8 @@ tar_target(res_marginal_sl,
 
  ,
 
-tar_target(res_contrast_nosl, 
-           res_nosl %>% 
+tar_target(res_contrast_nosl,
+           res_nosl %>%
            mutate(
              d0_vs_d1= map2(.x=d0, .y=d1, ~lmtp::lmtp_contrast(.y,ref = .x, type = "additive")),
              d0_vs_d2= map2(.x=d0, .y=d2, ~lmtp::lmtp_contrast(.y,ref = .x, type = "additive")),
