@@ -35,7 +35,8 @@ get_analytic_data <- function(data){
                                      "1_4",
                                      "5_9",
                                      "10_19",
-                                     "20_more"),ordered = T))) %>%
+                                     "20_more"),
+                          ordered = T))) %>%
     mutate(across(where(is_binary), factor)) %>%
     mutate(across(where(is_cat), factor)) %>%
 
@@ -48,8 +49,7 @@ get_analytic_data <- function(data){
            c2,
            y_bi= y_cognition,
            y_c= y_spm_corr) %>%
-    filter(l0_spm_corr<2.0001)
-
+    filter(l0_spm_corr<7.999)
 
 }
 
@@ -125,7 +125,7 @@ get_tmle_data <- function(imp_data){
 
   tmle_data<- imp_data %>%
     mutate(across(contains("teeth"),
-                  ~factor(.x,labels = 1:3,ordered = T))) %>%
+                  ~factor(.x,labels = 1:5,ordered = T))) %>%
     mutate(across(binary, as.numeric)) %>%
     mutate(across(binary, function(x) x-1)) %>%
 
@@ -252,13 +252,36 @@ pool_estimates <- function(df,mi=5){
 
 
 
+get_contra <- function(x){
+
+  exposed<- filter(x,
+                   a=="interupted")$mod %>%  .[[1]]
+  non_exposed<- filter(x,
+                       a=="not_interupted")$mod %>%  .[[1]]
+  lmtp_contrast(exposed, ref=non_exposed)$vals %>%
+    mutate(estimate = -theta,
+           conf_low = -conf.high,
+           conf_high= -conf.low,
+           intervention = "Difference")  %>%
+    select(intervention, estimate, conf_low, conf_high) %>%
+    add_column(grp= x$grp %>% unique(), .before = 1 )
+}
+
+
+
+
+
 
 run_lmtp_imp_data <- function(data, m, d, params){
 
-  data %>%
-    filter(.imp== m) %>%
+  dat <- data %>%
+    dplyr::filter(.imp== m)
 
-    purrr::lift(run_lmtp)(data=.,params, shift= eval(as.symbol(d)))
+  progressr::with_progress(
+
+  do.call(lmtp::lmtp_tmle,c(list(data=dat,shift= eval(as.symbol(d))),
+                     params))
+  )
 
 
 }
